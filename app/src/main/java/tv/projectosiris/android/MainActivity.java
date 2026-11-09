@@ -9,7 +9,7 @@ public class MainActivity extends Activity {
  web.getSettings().setMixedContentMode(WebSettings.MIXED_CONTENT_ALWAYS_ALLOW);
  web.setWebChromeClient(new WebChromeClient());web.setWebViewClient(new WebViewClient());
  web.addJavascriptInterface(new Bridge(),"AndroidBridge");web.setFocusable(true);web.setFocusableInTouchMode(true);
- setContentView(web);web.loadUrl("file:///android_asset/index.html");web.requestFocus();}
+ setContentView(web);web.loadUrl("file:///android_asset/index.html");}
  void respond(int id,boolean ok,Object value){runOnUiThread(()->{String v=JSONObject.quote(String.valueOf(value));String js="window.__osirisResolve("+id+","+ok+","+(ok?String.valueOf(value):v)+")";web.evaluateJavascript(js,null);});}
  void success(int id,Object v){respond(id,true,v==null?"null":v instanceof String?JSONObject.quote((String)v):v);}
  void fail(int id,String s){respond(id,false,s);}
@@ -53,7 +53,5 @@ public class MainActivity extends Activity {
  }
  }
  @Override protected void onActivityResult(int req,int result,Intent data){super.onActivityResult(req,result,data);if(req==42&&fileId>=0){int id=fileId;fileId=-1;if(result!=RESULT_OK||data==null){success(id,null);return;}try(InputStream in=getContentResolver().openInputStream(data.getData())){ByteArrayOutputStream out=new ByteArrayOutputStream();byte[] b=new byte[8192];int n;while((n=in.read(b))!=-1){out.write(b,0,n);if(out.size()>25000000)throw new IOException("File too large");}success(id,out.toString("UTF-8"));}catch(Exception e){fail(id,e.getMessage());}}}
- @Override public void onBackPressed(){
- web.evaluateJavascript("(function(){var p=document.getElementById('settingsPanel');if(!p||p.classList.contains('hidden'))return false;var a=document.activeElement;if(a&&a.matches('input,textarea')){a.blur();return true;}var b=document.getElementById('closeSettings');if(b)b.click();return true;})()",v->{if(!"true".equals(v))super.onBackPressed();});
-}
+ @Override public void onBackPressed(){web.evaluateJavascript("(function(){var p=document.getElementById('settingsPanel');if(p&&!p.classList.contains('hidden')){var b=document.getElementById('closeSettings');if(b)b.click();return true}return false})()",v->{if(!"true".equals(v))super.onBackPressed();});}
 }

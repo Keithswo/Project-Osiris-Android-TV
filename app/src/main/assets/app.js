@@ -2,33 +2,52 @@ const $=id=>document.getElementById(id);let channels=[],epg={},category='All Cha
 function loadFavorites(){try{const saved=JSON.parse(localStorage.getItem('cadenceFavoritesV2')||'[]');return new Set(Array.isArray(saved)?saved:[])}catch{return new Set()}}
 function persistFavorites(){try{localStorage.setItem('cadenceFavoritesV2',JSON.stringify([...favorites]))}catch(e){status('Could not save favorites: '+e.message)}}
 const escapeHtml=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-function status(s){$('status').textContent=s}function settings(show){$('settingsPanel').classList.toggle('hidden',!show)}
-// Android TV directional focus management for Settings.
-let settingsPreviousFocus=null;
-const originalSettings=settings;
-settings=function(show){
- if(show)settingsPreviousFocus=document.activeElement;
- originalSettings(show);
- if(show)requestAnimationFrame(()=>document.getElementById('xtreamServer')?.focus());
- else requestAnimationFrame(()=>{const target=settingsPreviousFocus?.isConnected?settingsPreviousFocus:document.getElementById('setup');target?.focus();});
-};
+function status(s){$('status').textContent=s}function settings(show){
+ const panel=$('settingsPanel');
+ panel.classList.toggle('hidden',!show);
+ if(show)requestAnimationFrame(()=>{$('closeSettings')?.focus()});
+ else document.activeElement?.blur();
+}
+// On a TV, focusing a text field must not summon the on-screen keyboard.
+// Press OK/Enter to explicitly switch the highlighted field into editing.
+let tvEditing=null;
+function tvTextFields(){return [...document.querySelectorAll('#settingsPanel input:not([type=checkbox]):not([type=range]), #settingsPanel textarea')]}
+function tvEndEdit(){
+ if(tvEditing){tvEditing.readOnly=true;tvEditing.dataset.tvEditing='false';tvEditing.blur();tvEditing=null;}
+}
+document.addEventListener('DOMContentLoaded',()=>{
+ tvTextFields().forEach(el=>{
+  el.readOnly=true;
+  el.addEventListener('click',()=>{if(!tvEditing){tvStartEdit(el)}});
+  el.addEventListener('blur',()=>{if(tvEditing===el){el.readOnly=true;tvEditing=null}});
+ });
+});
+function tvStartEdit(el){
+ tvEndEdit();tvEditing=el;el.readOnly=false;el.dataset.tvEditing='true';
+ el.focus();if(window.AndroidBridge){const event=new Event('tv-edit-start');el.dispatchEvent(event);}
+}
 document.addEventListener('keydown',e=>{
- const panel=document.getElementById('settingsPanel');
+ const panel=$('settingsPanel');
  if(!panel||panel.classList.contains('hidden'))return;
+ if(e.key==='Backspace'){return;} // Never hijack password deletion.
  if(e.key==='Escape'||e.key==='BrowserBack'){
-  if(document.activeElement?.matches('input,textarea')) document.activeElement.blur();
+  if(tvEditing){tvEndEdit();$('closeSettings')?.focus();}
   else settings(false);
   e.preventDefault();e.stopImmediatePropagation();return;
  }
- if(!['ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].includes(e.key))return;
- const targets=[...panel.querySelectorAll('input:not([type="hidden"]),button,select,textarea')].filter(el=>!el.disabled&&el.getClientRects().length);
- const index=targets.indexOf(document.activeElement);
- if(index<0){targets[0]?.focus();e.preventDefault();return;}
- if((e.key==='ArrowUp'||e.key==='ArrowDown')&&document.activeElement?.tagName!=='SELECT'){
-  targets[(index+(e.key==='ArrowDown'?1:-1)+targets.length)%targets.length]?.focus();
-  e.preventDefault();
+ const controls=[...panel.querySelectorAll('button,input,select,textarea')].filter(el=>!el.disabled&&el.getClientRects().length);
+ const focused=document.activeElement;
+ if((e.key==='Enter'||e.key===' ')&&focused?.matches('input[readonly],textarea[readonly]')){
+  tvStartEdit(focused);e.preventDefault();return;
+ }
+ if(tvEditing)return; // Allow keyboard input without D-pad focus changes.
+ if(e.key==='ArrowUp'||e.key==='ArrowDown'){
+  const index=controls.indexOf(focused);
+  controls[(Math.max(index,0)+(e.key==='ArrowDown'?1:-1)+controls.length)%controls.length]?.focus();
+  e.preventDefault();e.stopImmediatePropagation();
  }
 },true);
+
 function parseM3U(txt){const lines=txt.replace(/\r/g,'').split('\n');let items=[],info=null;for(let l of lines){l=l.trim();if(l.startsWith('#EXTINF:')){let attr=k=>{let m=l.match(new RegExp(k+'="([^"]*)"','i'));return m?m[1]:''};info={name:l.split(',').slice(1).join(',').trim()||'Unnamed Channel',id:attr('tvg-id'),logo:attr('tvg-logo'),group:attr('group-title')||'Uncategorized'};}else if(l&&!l.startsWith('#')&&info){items.push({...info,url:l});info=null}}return items}
 function parseXML(txt){const doc=new DOMParser().parseFromString(txt,'text/xml');if(doc.querySelector('parsererror'))throw Error('Invalid XMLTV');const out={};for(let p of doc.querySelectorAll('programme')){let id=p.getAttribute('channel'),start=xmlDate(p.getAttribute('start')),stop=xmlDate(p.getAttribute('stop'));if(!id||!start||!stop)continue;(out[id]??=[]).push({start,stop,title:p.querySelector('title')?.textContent||'Program',desc:p.querySelector('desc')?.textContent||''})}for(let list of Object.values(out))list.sort((a,b)=>a.start-b.start);return out}
 function xmlDate(s){if(!s)return null;const m=s.match(/^(\d{4})(\d\d)(\d\d)(\d\d)(\d\d)(\d\d)?\s*([+-]\d{4})?/);if(!m)return null;let iso=`${m[1]}-${m[2]}-${m[3]}T${m[4]}:${m[5]}:${m[6]||'00'}Z`;let d=Date.parse(iso);if(m[7]){const t=m[7],mins=(+t.slice(1,3)*60 + +t.slice(3,5))*(t[0]==='+'?1:-1);d-=mins*60000}return d}
