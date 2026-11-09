@@ -9,7 +9,7 @@ public class MainActivity extends Activity {
  web.getSettings().setMixedContentMode(WebSettings.MIXED_CONTENT_ALWAYS_ALLOW);
  web.setWebChromeClient(new WebChromeClient());web.setWebViewClient(new WebViewClient());
  web.addJavascriptInterface(new Bridge(),"AndroidBridge");web.setFocusable(true);web.setFocusableInTouchMode(true);
- setContentView(web);web.loadUrl("file:///android_asset/index.html");}
+ setContentView(web);web.loadUrl("file:///android_asset/index.html");web.requestFocus();}
  void respond(int id,boolean ok,Object value){runOnUiThread(()->{String v=JSONObject.quote(String.valueOf(value));String js="window.__osirisResolve("+id+","+ok+","+(ok?String.valueOf(value):v)+")";web.evaluateJavascript(js,null);});}
  void success(int id,Object v){respond(id,true,v==null?"null":v instanceof String?JSONObject.quote((String)v):v);}
  void fail(int id,String s){respond(id,false,s);}
@@ -27,9 +27,9 @@ public class MainActivity extends Activity {
  new Thread(()->{try{
  JSONArray a=new JSONArray(raw);
  switch(method){
- case "profileSave": profile=a.getJSONObject(0);success(id,new JSONObject().put("saved",true).put("kind",profile.optString("kind")));break;
- case "profileLoad": success(id,profile);break;
- case "profileClear":profile=null;success(id,true);break;
+ case "profileSave": profile=a.getJSONObject(0);getPreferences(MODE_PRIVATE).edit().putString("provider_profile",profile.toString()).apply();success(id,new JSONObject().put("saved",true).put("kind",profile.optString("kind")));break;
+ case "profileLoad": if(profile==null){String saved=getPreferences(MODE_PRIVATE).getString("provider_profile",null);if(saved!=null)profile=new JSONObject(saved);}success(id,profile);break;
+ case "profileClear":profile=null;getPreferences(MODE_PRIVATE).edit().remove("provider_profile").apply();success(id,true);break;
  case "loadUrl":success(id,fetch(a.getString(0)));break;
  case "xtreamLogin":{
  JSONObject d=a.getJSONObject(0);String server=d.getString("server").replaceAll("/+$",""),user=d.getString("username"),pass=d.getString("password");
