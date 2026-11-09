@@ -15,6 +15,7 @@ import android.view.*;
 import android.widget.*;
 import android.text.InputType;
 import android.text.TextUtils;
+import android.view.inputmethod.InputMethodManager;
 import androidx.media3.common.*;
 import androidx.media3.common.util.UnstableApi;
 import androidx.media3.exoplayer.ExoPlayer;
@@ -270,23 +271,81 @@ public class MainActivity extends Activity {
   });
   Button exit=button("Exit (Discard)",()->dialog.dismiss());
   footer.addView(save,new LinearLayout.LayoutParams(0,dp(48),1));footer.addView(exit,new LinearLayout.LayoutParams(0,dp(48),1));add(settings,footer);
-  dialog.show();
-  ArrayList<View> focusControls=new ArrayList<>();
-  focusControls.add(m3u);focusControls.add(server);focusControls.add(user);focusControls.add(pass);focusControls.add(epg);
-  focusControls.add(all);focusControls.add(none);focusControls.addAll(checks);focusControls.add(save);focusControls.add(exit);
-  for(View control:focusControls){
-   control.setFocusable(true);
-   control.setOnFocusChangeListener((v,hasFocus)->{
-    GradientDrawable bg=new GradientDrawable();
-    bg.setColor(Color.rgb(28,28,28));bg.setCornerRadius(dp(8));
-    bg.setStroke(dp(hasFocus?3:1),hasFocus?Color.rgb(255,205,35):Color.rgb(70,70,70));
-    v.setBackground(bg);
-    if(hasFocus)sc.post(()->sc.smoothScrollTo(0,Math.max(0,v.getTop()-dp(80))));
+   dialog.getWindow();
+   dialog.show();
+   dialog.getWindow().setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_STATE_ALWAYS_HIDDEN);
+   ArrayList<View> focusControls=new ArrayList<>();
+   focusControls.add(m3u);focusControls.add(server);focusControls.add(user);focusControls.add(pass);focusControls.add(epg);
+   focusControls.add(all);focusControls.add(none);focusControls.addAll(checks);focusControls.add(save);focusControls.add(exit);
+   for(int i=0;i<focusControls.size();i++){
+    final View control=focusControls.get(i);
+    control.setFocusable(true);control.setFocusableInTouchMode(true);
+    if(control instanceof EditText){
+     EditText field=(EditText)control;
+     field.setShowSoftInputOnFocus(false);
+     field.setImeOptions(android.view.inputmethod.EditorInfo.IME_ACTION_DONE);
+     field.setOnEditorActionListener((v,action,event)->{
+      if(action==android.view.inputmethod.EditorInfo.IME_ACTION_DONE ||
+         (event!=null && event.getKeyCode()==KeyEvent.KEYCODE_ENTER)){
+       finishSettingsEdit(field);return true;
+      }return false;
+     });
+     field.setOnClickListener(v->beginSettingsEdit(field));
+    }
+    final int index=i;
+    control.setOnKeyListener((v,keyCode,event)->{
+     if(event.getAction()!=KeyEvent.ACTION_DOWN)return false;
+     if(v instanceof EditText && ((EditText)v).isCursorVisible()){
+      if(keyCode==KeyEvent.KEYCODE_BACK || keyCode==KeyEvent.KEYCODE_ENTER ||
+         keyCode==KeyEvent.KEYCODE_DPAD_CENTER){finishSettingsEdit((EditText)v);return true;}
+      return false;
+     }
+     if(keyCode==KeyEvent.KEYCODE_DPAD_DOWN || keyCode==KeyEvent.KEYCODE_DPAD_UP){
+      int next=index+(keyCode==KeyEvent.KEYCODE_DPAD_DOWN?1:-1);
+      if(next>=0 && next<focusControls.size()){
+       View target=focusControls.get(next);target.requestFocus();
+       scrollSettingsControl(sc,target);return true;
+      }
+      return true;
+     }
+     if(v instanceof EditText && (keyCode==KeyEvent.KEYCODE_DPAD_CENTER ||
+        keyCode==KeyEvent.KEYCODE_ENTER)){beginSettingsEdit((EditText)v);return true;}
+     return false;
+    });
+    control.setOnFocusChangeListener((v,hasFocus)->{
+     GradientDrawable bg=new GradientDrawable();
+     bg.setColor(Color.rgb(28,28,28));bg.setCornerRadius(dp(8));
+     bg.setStroke(dp(hasFocus?3:1),hasFocus?Color.rgb(255,205,35):Color.rgb(70,70,70));
+     v.setBackground(bg);
+     if(hasFocus)scrollSettingsControl(sc,v);
+    });
+   }
+   m3u.requestFocus();
+   scrollSettingsControl(sc,m3u);
+ }
+
+  void scrollSettingsControl(ScrollView sc,View target){
+   sc.post(()->{
+    Rect r=new Rect(0,0,target.getWidth(),target.getHeight());
+    sc.offsetDescendantRectToMyCoords(target,r);
+    int top=sc.getScrollY()+dp(24),bottom=sc.getScrollY()+sc.getHeight()-dp(24);
+    if(r.bottom>bottom)sc.smoothScrollBy(0,r.bottom-bottom);
+    else if(r.top<top)sc.smoothScrollBy(0,r.top-top);
    });
   }
-  m3u.requestFocus();
- }
- EditText input(String hint,String value){EditText e=new EditText(this);e.setSingleLine(true);e.setTextColor(white);e.setHintTextColor(muted);e.setHint(hint);e.setText(value);return e;}
+  void beginSettingsEdit(EditText field){
+   field.setCursorVisible(true);field.setShowSoftInputOnFocus(true);
+   field.requestFocus();field.setSelection(field.length());
+   InputMethodManager imm=(InputMethodManager)getSystemService(INPUT_METHOD_SERVICE);
+   field.post(()->imm.showSoftInput(field,InputMethodManager.SHOW_IMPLICIT));
+  }
+  void finishSettingsEdit(EditText field){
+   InputMethodManager imm=(InputMethodManager)getSystemService(INPUT_METHOD_SERVICE);
+   imm.hideSoftInputFromWindow(field.getWindowToken(),0);
+   field.setCursorVisible(false);field.setShowSoftInputOnFocus(false);
+   field.clearFocus();
+  }
+  EditText input(String hint,String value){EditText e=new EditText(this);e.setSingleLine(true);e.setTextColor(white);e.setHintTextColor(muted);e.setHint(hint);e.setText(value);e.setCursorVisible(false);return e;}
  void loadSaved(){if(prefs.getString("sourceType","").equals("m3u"))loadM3u(prefs.getString("m3u",""),false);else if(prefs.getString("sourceType","").equals("xtream"))loadXtream(prefs.getString("server",""),prefs.getString("user",""),prefs.getString("pass",""),false);String epg=prefs.getString("epgUrl","");if(!epg.isEmpty())loadGuide(epg);}
  String fetch(String url) throws Exception {URL u=new URL(url);URLConnection conn=u.openConnection();conn.setConnectTimeout(12000);conn.setReadTimeout(20000);conn.setRequestProperty("User-Agent","ProjectOsirisAndroid/2.3.7");try(InputStream stream=conn.getInputStream()){ByteArrayOutputStream out=new ByteArrayOutputStream();byte[] b=new byte[8192];int n;while((n=stream.read(b))!=-1){out.write(b,0,n);if(out.size()>25_000_000)throw new IOException("Playlist too large");}return out.toString("UTF-8");}}
  String attr(String s,String key){java.util.regex.Matcher m=java.util.regex.Pattern.compile(java.util.regex.Pattern.quote(key)+"=\\\"([^\\\"]*)\\\"").matcher(s);return m.find()?m.group(1):"";}
