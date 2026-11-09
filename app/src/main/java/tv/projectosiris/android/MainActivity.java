@@ -44,6 +44,23 @@ public class MainActivity extends Activity {
   }
   throw last;
  }
+ String attr(String line,String key){
+  java.util.regex.Matcher m=java.util.regex.Pattern.compile(java.util.regex.Pattern.quote(key)+"=\"([^\"]*)\"").matcher(line);
+  return m.find()?m.group(1):"";
+ }
+ JSONArray m3uChannels(String playlist)throws Exception{
+  JSONArray result=new JSONArray();String info="";
+  for(String line:playlist.split("\\r?\\n")){
+   line=line.trim();if(line.startsWith("#EXTINF:")){info=line;continue;}
+   if(line.isEmpty()||line.startsWith("#")||info.isEmpty())continue;
+   if(!line.startsWith("http://")&&!line.startsWith("https://")){info="";continue;}
+   String name=info.contains(",")?info.substring(info.lastIndexOf(',')+1).trim():"Channel";
+   JSONObject ch=new JSONObject();ch.put("name",name);ch.put("id",attr(info,"tvg-id"));
+   ch.put("logo",attr(info,"tvg-logo"));ch.put("group",attr(info,"group-title"));ch.put("url",line);
+   ch.put("streamId",String.valueOf(result.length()));result.put(ch);info="";
+  }
+  return result;
+ }
  String q(String s)throws Exception{return java.net.URLEncoder.encode(s,"UTF-8");}
  String api(String server,String user,String pass,String action)throws Exception{
  String base=server.replaceAll("/+$","").replaceAll("(?i)/player_api\\.php$","");return base+"/player_api.php?username="+q(user)+"&password="+q(pass)+(action.isEmpty()?"":"&action="+q(action));
@@ -93,19 +110,32 @@ public class MainActivity extends Activity {
  String categoryWarning="";
  try{groups=new JSONArray(request(api(server,user,pass,"get_live_categories")));}
  catch(Exception ex){categoryWarning="Categories unavailable: "+ex.getMessage();}
- JSONArray streams;
- try{streams=new JSONArray(request(api(server,user,pass,"get_live_streams")));}
- catch(Exception ex){throw new Exception("Login accepted, but live channels could not be downloaded: "+ex.getMessage());}
- Map<String,String> names=new HashMap<>();
- for(int i=0;i<groups.length();i++){JSONObject g=groups.getJSONObject(i);names.put(g.optString("category_id"),g.optString("category_name","Uncategorized"));}
- JSONArray channels=new JSONArray();
- for(int i=0;i<streams.length();i++){
-  JSONObject c=streams.getJSONObject(i);
-  String streamId=c.optString("stream_id"),ext=c.optString("container_extension","ts").replaceAll("[^a-zA-Z0-9]","");
-  JSONObject ch=new JSONObject();ch.put("name",c.optString("name","Channel"));ch.put("streamId",streamId);ch.put("id",c.optString("epg_channel_id"));
-  ch.put("logo",c.optString("stream_icon"));ch.put("group",names.getOrDefault(c.optString("category_id"),"Uncategorized"));
-  ch.put("url",server+"/live/"+q(user)+"/"+q(pass)+"/"+q(streamId)+"."+(ext.isEmpty()?"ts":ext));channels.put(ch);
+ JSONArray channels=new JSONArray();String streamWarning="";
+ try{
+  JSONArray streams=new JSONArray(request(api(server,user,pass,"get_live_streams")));
+  Map<String,String> names=new HashMap<>();
+  for(int i=0;i<groups.length();i++){JSONObject g=groups.getJSONObject(i);names.put(g.optString("category_id"),g.optString("category_name","Uncategorized"));}
+  for(int i=0;i<streams.length();i++){
+   JSONObject c=streams.getJSONObject(i);
+   String streamId=c.optString("stream_id"),ext=c.optString("container_extension","ts").replaceAll("[^a-zA-Z0-9]","");
+   JSONObject ch=new JSONObject();ch.put("name",c.optString("name","Channel"));ch.put("streamId",streamId);ch.put("id",c.optString("epg_channel_id"));
+   ch.put("logo",c.optString("stream_icon"));ch.put("group",names.getOrDefault(c.optString("category_id"),"Uncategorized"));
+   ch.put("url",server+"/live/"+q(user)+"/"+q(pass)+"/"+q(streamId)+"."+(ext.isEmpty()?"ts":ext));channels.put(ch);
+  }
+ }catch(Exception streamError){
+  // Some Xtream servers authenticate correctly but return malformed live-stream JSON.
+  // Fall back to the standard Xtream M3U endpoint rather than rejecting the login.
+  try{
+   String playlist=request(server+"/get.php?username="+q(user)+"&password="+q(pass)+"&type=m3u_plus&output=ts");
+   if(!playlist.contains("#EXTM3U"))throw new Exception("Provider did not return an M3U playlist");
+   channels=m3uChannels(playlist);
+   if(channels.length()==0)throw new Exception("M3U playlist contained no playable channels");
+   streamWarning="Live-stream API returned malformed data; channels loaded using M3U fallback";
+  }catch(Exception fallbackError){
+   throw new Exception("Login accepted, but both channel-list formats failed. Live-stream API: "+streamError.getClass().getSimpleName()+"; M3U: "+fallbackError.getMessage());
+  }
  }
+ if(!streamWarning.isEmpty())categoryWarning=categoryWarning.isEmpty()?streamWarning:categoryWarning+"; "+streamWarning;
  success(id,new JSONObject().put("channels",channels).put("count",channels.length()).put("warning",categoryWarning).put("accountStatus",info.optString("status","Active")));break;}
  case "xtreamEpg":if(session==null)throw new Exception("Connect Xtream first");
  success(id,fetch(session.getString("server")+"/xmltv.php?username="+q(session.getString("username"))+"&password="+q(session.getString("password"))));break;
