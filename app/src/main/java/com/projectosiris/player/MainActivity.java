@@ -16,6 +16,7 @@ import android.widget.*;
 import android.text.InputType;
 import android.text.TextUtils;
 import android.view.inputmethod.InputMethodManager;
+import android.view.inputmethod.EditorInfo;
 import androidx.media3.common.*;
 import androidx.media3.common.util.UnstableApi;
 import androidx.media3.exoplayer.ExoPlayer;
@@ -47,6 +48,7 @@ public class MainActivity extends Activity {
  int white=Color.WHITE, muted=Color.rgb(175,175,175), dark=Color.rgb(5,5,5), blue=Color.rgb(84,84,84), panel=Color.rgb(22,22,22), edge=Color.rgb(104,104,104);
  Dialog fullscreenDialog; ExoPlayer fullscreenPlayer;
  LinearLayout navBar; final ArrayList<LinearLayout> navButtons=new ArrayList<>();
+ boolean guideCategoriesOpen=false;
  @Override public void onCreate(Bundle state){super.onCreate(state);prefs=getSharedPreferences("osiris_android",MODE_PRIVATE);screenCount=prefs.getInt("screens",4);buildShell();String type=prefs.getString("sourceType","");if(!type.isEmpty())loadSaved();}
  int dp(float n){return (int)(n*getResources().getDisplayMetrics().density+0.5f);}
  GradientDrawable shape(int fill,int border,int radius){GradientDrawable g=new GradientDrawable();g.setColor(fill);g.setCornerRadius(dp(radius));if(border!=0)g.setStroke(dp(1),border);return g;}
@@ -68,12 +70,14 @@ public class MainActivity extends Activity {
   TextView menu=text("⋮",25);menu.setGravity(Gravity.CENTER);menu.setContentDescription("Settings");menu.setOnClickListener(v->showSettings());brand.addView(menu,new LinearLayout.LayoutParams(dp(34),dp(getResources().getConfiguration().orientation==Configuration.ORIENTATION_LANDSCAPE?34:52)));add(header,brand);
   View separator=new View(this);separator.setBackgroundColor(Color.rgb(100,100,100));header.addView(separator,new LinearLayout.LayoutParams(-1,dp(1)));
   navBar=new LinearLayout(this);navBar.setOrientation(LinearLayout.VERTICAL);navBar.setPadding(dp(3),dp(4),dp(3),dp(4));
-  String[] labels={"Live TV","Guide","Multiview","Categories","Settings"};String[] symbols={"▣","▦","⊞","☷","⚙"};
+  String[] labels={"Live TV","Multiview","Guide","Categories","Favorites","Recent","Settings"};String[] symbols={"▣","⊞","▦","☷","☆","◷","⚙"};
   for(int i=0;i<labels.length;i++){
    final String name=labels[i];LinearLayout item=column();item.setGravity(Gravity.CENTER);item.setFocusable(true);item.setClickable(true);item.setId(View.generateViewId());
    TextView icon=text(symbols[i],21);icon.setGravity(Gravity.CENTER);icon.setPadding(0,0,0,0);item.addView(icon,new LinearLayout.LayoutParams(-1,dp(25)));
    TextView title=text(name,11);title.setSingleLine(true);title.setGravity(Gravity.CENTER);title.setPadding(0,0,0,0);item.addView(title,new LinearLayout.LayoutParams(-1,dp(19)));
-   item.setOnClickListener(v->{targetTile=-1;if(name.equals("Settings")){showSettings();return;}previousView=currentView;currentView=name.equals("Live TV")?"live":name.equals("Multiview")?"multi":name.equals("Categories")?"categories":"guide";render();});
+   item.setOnClickListener(v->{targetTile=-1;if(name.equals("Settings")){showSettings();return;}
+    if(name.equals("Categories") && currentView.equals("guide")){guideCategoriesOpen=!guideCategoriesOpen;render();return;}
+    previousView=currentView;currentView=name.equals("Live TV")?"live":name.equals("Multiview")?"multi":name.equals("Categories")?"categories":name.equals("Favorites")?"favorites":name.equals("Recent")?"recent":"guide";render();});
    LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(-1,dp(58));lp.setMargins(dp(1),0,dp(1),0);navBar.addView(item,lp);navButtons.add(item);
   }
   info=text("Add an M3U or Xtream account in Settings to begin.",11);info.setTextColor(muted);info.setPadding(dp(12),dp(3),dp(12),dp(6));add(header,info);
@@ -88,7 +92,7 @@ public class MainActivity extends Activity {
   }
   navButtons.get(0).requestFocus();render();
  }
- void updateNav(){String active=currentView.equals("multi")?"Multiview":currentView.equals("guide")?"Guide":currentView.equals("categories")?"Categories":"Live TV";String[] labels={"Live TV","Guide","Multiview","Categories","Settings"};for(int i=0;i<navButtons.size();i++){LinearLayout item=navButtons.get(i);boolean selected=labels[i].equals(active);boolean focused=item.hasFocus();item.setBackground(chrome(focused?Color.rgb(110,110,110):selected?Color.rgb(75,75,75):Color.rgb(15,15,15),selected?Color.rgb(22,22,22):Color.rgb(5,5,5),selected?Color.rgb(255,205,35):focused?Color.WHITE:Color.rgb(36,36,36),9));}}
+ void updateNav(){String active=currentView.equals("multi")?"Multiview":currentView.equals("guide")?"Guide":currentView.equals("categories")?"Categories":currentView.equals("favorites")?"Favorites":currentView.equals("recent")?"Recent":"Live TV";String[] labels={"Live TV","Multiview","Guide","Categories","Favorites","Recent","Settings"};for(int i=0;i<navButtons.size();i++){LinearLayout item=navButtons.get(i);boolean selected=labels[i].equals(active);boolean focused=item.hasFocus();item.setBackground(chrome(focused?Color.rgb(110,110,110):selected?Color.rgb(75,75,75):Color.rgb(15,15,15),selected?Color.rgb(22,22,22):Color.rgb(5,5,5),selected?Color.rgb(255,205,35):focused?Color.WHITE:Color.rgb(36,36,36),9));}}
  @Override public void onConfigurationChanged(Configuration config){super.onConfigurationChanged(config);if(root!=null){releasePlayers();buildShell();}}
  void message(String s){info.setText(s);}
  void releasePlayers(){for(ExoPlayer p:players){p.release();}players.clear();playerTiles.clear();}
@@ -98,7 +102,7 @@ public class MainActivity extends Activity {
  boolean enabled(String group){return prefs.getBoolean("cat_"+group,true);}
  ArrayList<String> groups(){TreeSet<String> groups=new TreeSet<>(String.CASE_INSENSITIVE_ORDER);for(Channel c:channels)groups.add(c.group);return new ArrayList<>(groups);}
  ArrayList<Channel> filtered(String group){ArrayList<Channel> result=new ArrayList<>();for(Channel c:channels)if(enabled(c.group)&&(group.equals("All Channels")||c.group.equals(group)))result.add(c);return result;}
- void render(){releasePlayers();body.removeAllViews();updateNav();if(currentView.equals("multi"))renderMultiview();else if(currentView.equals("guide"))renderGuide();else if(currentView.equals("categories"))renderCategories();else if(currentView.equals("categoryChannels"))renderCategoryChannels();else renderLive();}
+ void render(){releasePlayers();body.removeAllViews();updateNav();if(currentView.equals("multi"))renderMultiview();else if(currentView.equals("guide"))renderGuide();else if(currentView.equals("categories"))renderCategories();else if(currentView.equals("categoryChannels"))renderCategoryChannels();else if(currentView.equals("favorites")){section(body,"Favorites",null);for(Channel c:channels)if(favorite(c))channelRow(body,c,0,prefs.getString("lastUrl",""));}else if(currentView.equals("recent")){section(body,"Recent",null);renderLive();}else renderLive();}
  String channelNumber(Channel c,int index){java.util.regex.Matcher m=java.util.regex.Pattern.compile("^\\s*(\\d{1,5})\\b").matcher(c.name);return m.find()?m.group(1):String.valueOf(index+1);}
  String cleanName(Channel c){return c.name.replaceFirst("^\\s*\\d{1,5}\\s*[-.:]?\\s*","");}
  void channelRow(LinearLayout holder,Channel c,int index,String last){
@@ -164,40 +168,65 @@ public class MainActivity extends Activity {
   fullscreenPlayer.setMediaItem(MediaItem.fromUri(c.url));fullscreenPlayer.prepare();fullscreenPlayer.play();
  }
  void renderGuide(){
-  section(body,"Live TV Guide","Choose a category, then swipe horizontally to see the next two hours.");
-  String selected=prefs.getString("guideCategory","");
-  add(body,button(selected.isEmpty()?"Select a Category":selected+"  ▾",()->chooseCategory(-1)));
-  if(selected.isEmpty()){add(body,text("Select a category to display the program timeline.",14));return;}
-  ArrayList<Channel> items=filtered(selected);
-  if(items.isEmpty()){add(body,text("No channels in this category.",14));return;}
-  long now=System.currentTimeMillis();long begin=(now/1800000L)*1800000L;long finish=now+7200000L;
-  HorizontalScrollView horizontal=new HorizontalScrollView(this);horizontal.setFillViewport(false);
-  LinearLayout table=column();int labelWidth=145;int timeWidth=720;
-  LinearLayout heading=new LinearLayout(this);heading.setOrientation(LinearLayout.HORIZONTAL);
-  TextView label=text("CHANNEL",12);heading.addView(label,new LinearLayout.LayoutParams(dp(labelWidth),dp(48)));
-  LinearLayout ticks=new LinearLayout(this);ticks.setOrientation(LinearLayout.HORIZONTAL);
+  // TV-first Guide: Categories is a toggle on the left, not a mandatory modal.
+  ArrayList<Channel> items=filtered(categorySelection);
+  if(items.isEmpty() && !categorySelection.equals("All Channels")){categorySelection="All Channels";items=filtered(categorySelection);}
+  LinearLayout guideArea=new LinearLayout(this);guideArea.setOrientation(LinearLayout.HORIZONTAL);
+  if(guideCategoriesOpen){
+   LinearLayout categories=card();categories.setFocusable(false);
+   TextView title=text("Categories",17);title.setTypeface(null,Typeface.BOLD);add(categories,title);
+   ScrollView categoryScroll=new ScrollView(this);LinearLayout categoryItems=column();
+   ArrayList<String> names=new ArrayList<>();names.add("All Channels");names.addAll(groups());
+   for(String group:names){Button b=button(group,()->{categorySelection=group;render();});
+    if(group.equals(categorySelection))b.setBackground(shape(Color.rgb(48,48,48),Color.rgb(255,205,35),7));
+    add(categoryItems,b);}
+   categoryScroll.addView(categoryItems);categories.addView(categoryScroll,new LinearLayout.LayoutParams(-1,0,1));
+   guideArea.addView(categories,new LinearLayout.LayoutParams(dp(190),dp(510)));
+  }
+  LinearLayout content=column();content.setPadding(dp(8),0,0,0);
+  LinearLayout preview=card();TextView previewTitle=text("LIVE PREVIEW  •  "+categorySelection,16);add(preview,previewTitle);
+  String last=prefs.getString("lastUrl","");Channel selected=null;
+  for(Channel c:items)if(c.url.equals(last)){selected=c;break;}
+  if(selected==null&&!items.isEmpty())selected=items.get(0);
+  if(selected!=null){makePlayer(preview,selected,170);add(preview,text(cleanName(selected),17));}
+  else add(preview,text("Select a channel to start watching",15));
+  add(content,preview);gap(content,8);
+  LinearLayout titleRow=new LinearLayout(this);titleRow.setOrientation(LinearLayout.HORIZONTAL);
+  TextView heading=text("TV Guide  •  "+items.size()+" channels",17);heading.setTypeface(null,Typeface.BOLD);
+  titleRow.addView(heading,new LinearLayout.LayoutParams(0,dp(48),1));
+  Button toggle=button(guideCategoriesOpen?"◀ Categories":"Categories ▶",()->{guideCategoriesOpen=!guideCategoriesOpen;render();});
+  titleRow.addView(toggle,new LinearLayout.LayoutParams(dp(145),dp(48)));add(content,titleRow);
+  long now=System.currentTimeMillis(),begin=(now/1800000L)*1800000L,finish=begin+7200000L;
+  HorizontalScrollView horizontal=new HorizontalScrollView(this);horizontal.setFillViewport(true);
+  LinearLayout table=column();int labelWidth=165;
+  LinearLayout times=new LinearLayout(this);times.setOrientation(LinearLayout.HORIZONTAL);
+  addGuideHeader(times,"CHANNEL",labelWidth);
   SimpleDateFormat clock=new SimpleDateFormat("h:mm a",Locale.getDefault());
-  for(int i=0;i<5;i++){TextView tick=text(clock.format(new Date(begin+i*1800000L)),12);tick.setTextColor(muted);ticks.addView(tick,new LinearLayout.LayoutParams(dp(180),dp(48)));}
-  heading.addView(ticks,new LinearLayout.LayoutParams(dp(timeWidth+180),dp(48)));add(table,heading);
-  int max=Math.min(100,items.size());
+  for(int i=0;i<4;i++)addGuideHeader(times,clock.format(new Date(begin+i*1800000L)),180);
+  add(table,times);
+  int max=Math.min(150,items.size());
   for(int i=0;i<max;i++){
    Channel c=items.get(i);LinearLayout row=new LinearLayout(this);row.setOrientation(LinearLayout.HORIZONTAL);
-   TextView name=text(cleanName(c),12);name.setSingleLine(true);name.setEllipsize(TextUtils.TruncateAt.END);name.setBackground(shape(panel,edge,4));
-   name.setOnClickListener(v->{prefs.edit().putString("lastUrl",c.url).apply();previousView="guide";currentView="live";render();});
+   Button name=button(cleanName(c),()->playGuideChannel(c));name.setTextSize(12);
    row.addView(name,new LinearLayout.LayoutParams(dp(labelWidth),dp(55)));
    LinearLayout timeline=new LinearLayout(this);timeline.setOrientation(LinearLayout.HORIZONTAL);
    ArrayList<Program> programs=schedule.get(c.id);long cursor=begin;
    if(programs!=null)for(Program program:programs){
     if(program.end<=begin||program.start>=finish)continue;
     long left=Math.max(begin,program.start),right=Math.min(finish,program.end);
-    if(left>cursor){addGuideCell(timeline,"No EPG",left-cursor,c);cursor=left;}
+    if(left>cursor){addGuideCell(timeline,"No guide data",left-cursor,c);cursor=left;}
     if(right>cursor){addGuideCell(timeline,program.title,right-cursor,c);cursor=right;}
    }
-   if(cursor<finish)addGuideCell(timeline,"No EPG available",finish-cursor,c);
+   if(cursor<finish)addGuideCell(timeline,"No guide data",finish-cursor,c);
    row.addView(timeline,new LinearLayout.LayoutParams(-2,dp(55)));add(table,row);
   }
-  horizontal.addView(table);add(body,horizontal);
+  horizontal.addView(table);content.addView(horizontal,new LinearLayout.LayoutParams(-1,dp(430)));
+  guideArea.addView(content,new LinearLayout.LayoutParams(0,-2,1));add(body,guideArea);
+  // Initial focus lands on a channel, not the timeline.
+  content.post(()->{if(table.getChildCount()>1){View first=((LinearLayout)table.getChildAt(1)).getChildAt(0);first.requestFocus();}});
  }
+ void addGuideHeader(LinearLayout row,String value,int width){TextView v=text(value,12);v.setBackground(shape(Color.rgb(32,32,32),edge,4));row.addView(v,new LinearLayout.LayoutParams(dp(width),dp(44)));}
+ void playGuideChannel(Channel c){prefs.edit().putString("lastUrl",c.url).apply();previousView="guide";currentView="live";render();}
  void addGuideCell(LinearLayout row,String title,long duration,Channel c){
   int width=Math.max(28,(int)(duration*360.0/3600000.0));
   TextView cell=text(title,12);cell.setSingleLine(true);cell.setEllipsize(TextUtils.TruncateAt.END);
@@ -263,89 +292,60 @@ public class MainActivity extends Activity {
    String oldM3u=prefs.getString("m3u","");String oldServer=prefs.getString("server","");
    String oldUser=prefs.getString("user","");String oldPass=prefs.getString("pass","");
    String m=m3u.getText().toString().trim(),sv=server.getText().toString().trim(),u=user.getText().toString().trim(),pw=pass.getText().toString();
-   String e=epg.getText().toString().trim();edit.putString("epgUrl",e);edit.apply();
-   dialog.dismiss();render();
+   String e=epg.getText().toString().trim();edit.putString("epgUrl",e);edit.commit();
+   dialog.dismiss();message("Settings Saved Successfully");render();
    if(!sv.isEmpty()&&!u.isEmpty()&&!pw.isEmpty()&&(!sv.equals(oldServer)||!u.equals(oldUser)||!pw.equals(oldPass)))loadXtream(sv,u,pw,true);
    else if(!m.isEmpty()&&!m.equals(oldM3u))loadM3u(m,true);
    if(!e.isEmpty()&&!e.equals(prefs.getString("loadedEpgUrl",""))){prefs.edit().putString("loadedEpgUrl",e).apply();loadGuide(e);}
   });
   Button exit=button("Exit (Discard)",()->dialog.dismiss());
   footer.addView(save,new LinearLayout.LayoutParams(0,dp(48),1));footer.addView(exit,new LinearLayout.LayoutParams(0,dp(48),1));add(settings,footer);
-   dialog.getWindow();
-   dialog.show();
-   dialog.getWindow().setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_STATE_ALWAYS_HIDDEN);
-   ArrayList<View> focusControls=new ArrayList<>();
-   focusControls.add(m3u);focusControls.add(server);focusControls.add(user);focusControls.add(pass);focusControls.add(epg);
-   focusControls.add(all);focusControls.add(none);focusControls.addAll(checks);focusControls.add(save);focusControls.add(exit);
-   for(int i=0;i<focusControls.size();i++){
-    final View control=focusControls.get(i);
-    control.setFocusable(true);control.setFocusableInTouchMode(true);
-    if(control instanceof EditText){
-     EditText field=(EditText)control;
-     field.setShowSoftInputOnFocus(false);
-     field.setImeOptions(android.view.inputmethod.EditorInfo.IME_ACTION_DONE);
-     field.setOnEditorActionListener((v,action,event)->{
-      if(action==android.view.inputmethod.EditorInfo.IME_ACTION_DONE ||
-         (event!=null && event.getKeyCode()==KeyEvent.KEYCODE_ENTER)){
-       finishSettingsEdit(field);return true;
-      }return false;
-     });
-     field.setOnClickListener(v->beginSettingsEdit(field));
-    }
-    final int index=i;
-    control.setOnKeyListener((v,keyCode,event)->{
-     if(event.getAction()!=KeyEvent.ACTION_DOWN)return false;
-     if(v instanceof EditText && ((EditText)v).isCursorVisible()){
-      if(keyCode==KeyEvent.KEYCODE_BACK || keyCode==KeyEvent.KEYCODE_ENTER ||
-         keyCode==KeyEvent.KEYCODE_DPAD_CENTER){finishSettingsEdit((EditText)v);return true;}
-      return false;
-     }
-     if(keyCode==KeyEvent.KEYCODE_DPAD_DOWN || keyCode==KeyEvent.KEYCODE_DPAD_UP){
-      int next=index+(keyCode==KeyEvent.KEYCODE_DPAD_DOWN?1:-1);
-      if(next>=0 && next<focusControls.size()){
-       View target=focusControls.get(next);target.requestFocus();
-       scrollSettingsControl(sc,target);return true;
-      }
-      return true;
-     }
-     if(v instanceof EditText && (keyCode==KeyEvent.KEYCODE_DPAD_CENTER ||
-        keyCode==KeyEvent.KEYCODE_ENTER)){beginSettingsEdit((EditText)v);return true;}
-     return false;
-    });
-    control.setOnFocusChangeListener((v,hasFocus)->{
-     GradientDrawable bg=new GradientDrawable();
-     bg.setColor(Color.rgb(28,28,28));bg.setCornerRadius(dp(8));
-     bg.setStroke(dp(hasFocus?3:1),hasFocus?Color.rgb(255,205,35):Color.rgb(70,70,70));
-     v.setBackground(bg);
-     if(hasFocus)scrollSettingsControl(sc,v);
-    });
+  dialog.show();
+  dialog.getWindow().setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_STATE_ALWAYS_HIDDEN);
+  ArrayList<View> focusControls=new ArrayList<>();
+  focusControls.add(m3u);focusControls.add(server);focusControls.add(user);focusControls.add(pass);focusControls.add(epg);
+  focusControls.add(all);focusControls.add(none);focusControls.addAll(checks);focusControls.add(save);focusControls.add(exit);
+  for(int i=0;i<focusControls.size();i++){
+   View control=focusControls.get(i);final int position=i;
+   control.setId(View.generateViewId());control.setFocusable(true);control.setFocusableInTouchMode(true);
+   if(control instanceof EditText){
+    EditText edit=(EditText)control;edit.setShowSoftInputOnFocus(false);edit.setCursorVisible(false);
+    edit.setImeOptions(EditorInfo.IME_ACTION_DONE);
+    edit.setOnEditorActionListener((v,action,event)->{if(action==EditorInfo.IME_ACTION_DONE || (event!=null&&event.getKeyCode()==KeyEvent.KEYCODE_ENTER)){finishEdit(edit);return true;}return false;});
    }
-   m3u.requestFocus();
-   scrollSettingsControl(sc,m3u);
- }
-
-  void scrollSettingsControl(ScrollView sc,View target){
-   sc.post(()->{
-    Rect r=new Rect(0,0,target.getWidth(),target.getHeight());
-    sc.offsetDescendantRectToMyCoords(target,r);
-    int top=sc.getScrollY()+dp(24),bottom=sc.getScrollY()+sc.getHeight()-dp(24);
-    if(r.bottom>bottom)sc.smoothScrollBy(0,r.bottom-bottom);
-    else if(r.top<top)sc.smoothScrollBy(0,r.top-top);
+   control.setOnKeyListener((v,key,event)->{
+    if(event.getAction()!=KeyEvent.ACTION_DOWN)return false;
+    if(v instanceof EditText && ((EditText)v).isCursorVisible()){
+     if(key==KeyEvent.KEYCODE_BACK){finishEdit((EditText)v);return true;}return false;
+    }
+    if(key==KeyEvent.KEYCODE_DPAD_DOWN || key==KeyEvent.KEYCODE_DPAD_UP){
+     int next=position+(key==KeyEvent.KEYCODE_DPAD_DOWN?1:-1);
+     if(next>=0&&next<focusControls.size()){View target=focusControls.get(next);target.requestFocus();scrollToSetting(sc,target);}return true;
+    }
+    if(v instanceof EditText && (key==KeyEvent.KEYCODE_DPAD_CENTER || key==KeyEvent.KEYCODE_ENTER)){beginEdit((EditText)v);return true;}
+    return false;
+   });
+   control.setOnFocusChangeListener((v,hasFocus)->{
+    GradientDrawable bg=new GradientDrawable();
+    bg.setColor(Color.rgb(28,28,28));bg.setCornerRadius(dp(8));
+    bg.setStroke(dp(hasFocus?3:1),hasFocus?Color.rgb(255,205,35):Color.rgb(70,70,70));
+    v.setBackground(bg);
+    if(hasFocus)scrollToSetting(sc,v);
    });
   }
-  void beginSettingsEdit(EditText field){
-   field.setCursorVisible(true);field.setShowSoftInputOnFocus(true);
-   field.requestFocus();field.setSelection(field.length());
-   InputMethodManager imm=(InputMethodManager)getSystemService(INPUT_METHOD_SERVICE);
-   field.post(()->imm.showSoftInput(field,InputMethodManager.SHOW_IMPLICIT));
-  }
-  void finishSettingsEdit(EditText field){
-   InputMethodManager imm=(InputMethodManager)getSystemService(INPUT_METHOD_SERVICE);
-   imm.hideSoftInputFromWindow(field.getWindowToken(),0);
-   field.setCursorVisible(false);field.setShowSoftInputOnFocus(false);
-   field.clearFocus();
-  }
-  EditText input(String hint,String value){EditText e=new EditText(this);e.setSingleLine(true);e.setTextColor(white);e.setHintTextColor(muted);e.setHint(hint);e.setText(value);e.setCursorVisible(false);return e;}
+  m3u.requestFocus();
+ }
+ void scrollToSetting(ScrollView sc,View target){sc.post(()->{
+  Rect rect=new Rect();target.getDrawingRect(rect);sc.offsetDescendantRectToMyCoords(target,rect);
+  int top=sc.getScrollY()+dp(20),bottom=sc.getScrollY()+sc.getHeight()-dp(20);
+  if(rect.bottom>bottom)sc.smoothScrollBy(0,rect.bottom-bottom);
+  else if(rect.top<top)sc.smoothScrollBy(0,rect.top-top);
+ });}
+ void beginEdit(EditText field){field.setCursorVisible(true);field.setShowSoftInputOnFocus(true);field.requestFocus();field.setSelection(field.length());
+  InputMethodManager imm=(InputMethodManager)getSystemService(INPUT_METHOD_SERVICE);field.post(()->imm.showSoftInput(field,InputMethodManager.SHOW_IMPLICIT));}
+ void finishEdit(EditText field){InputMethodManager imm=(InputMethodManager)getSystemService(INPUT_METHOD_SERVICE);imm.hideSoftInputFromWindow(field.getWindowToken(),0);
+  field.setCursorVisible(false);field.setShowSoftInputOnFocus(false);}
+ EditText input(String hint,String value){EditText e=new EditText(this);e.setSingleLine(true);e.setTextColor(white);e.setHintTextColor(muted);e.setHint(hint);e.setText(value);return e;}
  void loadSaved(){if(prefs.getString("sourceType","").equals("m3u"))loadM3u(prefs.getString("m3u",""),false);else if(prefs.getString("sourceType","").equals("xtream"))loadXtream(prefs.getString("server",""),prefs.getString("user",""),prefs.getString("pass",""),false);String epg=prefs.getString("epgUrl","");if(!epg.isEmpty())loadGuide(epg);}
  String fetch(String url) throws Exception {URL u=new URL(url);URLConnection conn=u.openConnection();conn.setConnectTimeout(12000);conn.setReadTimeout(20000);conn.setRequestProperty("User-Agent","ProjectOsirisAndroid/2.3.7");try(InputStream stream=conn.getInputStream()){ByteArrayOutputStream out=new ByteArrayOutputStream();byte[] b=new byte[8192];int n;while((n=stream.read(b))!=-1){out.write(b,0,n);if(out.size()>25_000_000)throw new IOException("Playlist too large");}return out.toString("UTF-8");}}
  String attr(String s,String key){java.util.regex.Matcher m=java.util.regex.Pattern.compile(java.util.regex.Pattern.quote(key)+"=\\\"([^\\\"]*)\\\"").matcher(s);return m.find()?m.group(1):"";}
