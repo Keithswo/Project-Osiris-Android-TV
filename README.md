@@ -25,3 +25,12 @@ The original v2.3.9 `index.html`, `style.css`, `app.js` and original image asset
 Create a new GitHub repo, upload **the contents** of this ZIP (including `.github`), open Actions, select **Build Project Osiris Android TV APK**, Run workflow, then download `Project-Osiris-Android-TV-APK` from Artifacts.
 
 This Android repository does not modify the Windows application.
+
+
+## Login reliability update (November 2026)
+- Saved provider profiles are encrypted using an Android Keystore AES-GCM key; existing unencrypted preferences are migrated on first read.
+- Saves use a checked synchronous commit rather than silently reporting success.
+- Xtream authentication is evaluated separately from category and stream retrieval. Category failure no longer blocks channel loading.
+- Transient network I/O failures receive one retry. Authentication rejection is not retried.
+- The app reports channel-fetch errors distinctly from rejected credentials.
+- **Testing:** Source changes have not been compiled or tested on Fire TV. Install as an update with the same application ID; do not uninstall or clear app data if you want to retain your profile.

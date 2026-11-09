@@ -1,6 +1,6 @@
 package tv.projectosiris.android;
 import android.app.*;import android.os.*;import android.content.*;import android.webkit.*;import android.view.*;import android.graphics.Color;
-import org.json.*;import java.net.*;import java.io.*;import java.nio.charset.StandardCharsets;import java.util.*;
+import javax.crypto.*;import javax.crypto.spec.GCMParameterSpec;import android.security.keystore.KeyGenParameterSpec;import android.security.keystore.KeyProperties;import android.util.Base64;import java.security.KeyStore;import org.json.*;import java.net.*;import java.io.*;import java.nio.charset.StandardCharsets;import java.util.*;
 public class MainActivity extends Activity {
  WebView web; JSONObject profile=null; JSONObject session=null; int fileId=-1;
  @Override public void onCreate(Bundle b){super.onCreate(b);getWindow().getDecorView().setSystemUiVisibility(5894|1024|512);
@@ -18,6 +18,32 @@ public class MainActivity extends Activity {
  HttpURLConnection c=(HttpURLConnection)url.openConnection();c.setConnectTimeout(15000);c.setReadTimeout(65000);c.setRequestProperty("User-Agent","ProjectOsirisAndroidTV/2.3.9");
  try(InputStream in=c.getInputStream()){ByteArrayOutputStream out=new ByteArrayOutputStream();byte[] b=new byte[8192];int n;while((n=in.read(b))!=-1){out.write(b,0,n);if(out.size()>25000000)throw new IOException("Response too large");}return out.toString("UTF-8");}finally{c.disconnect();}
  }
+ String encrypt(String plain)throws Exception{
+  KeyStore ks=KeyStore.getInstance("AndroidKeyStore");ks.load(null);
+  String alias="osiris_provider_key_v1";
+  if(!ks.containsAlias(alias)){
+   KeyGenerator kg=KeyGenerator.getInstance(KeyProperties.KEY_ALGORITHM_AES,"AndroidKeyStore");
+   kg.init(new KeyGenParameterSpec.Builder(alias,KeyProperties.PURPOSE_ENCRYPT|KeyProperties.PURPOSE_DECRYPT)
+    .setBlockModes(KeyProperties.BLOCK_MODE_GCM).setEncryptionPaddings(KeyProperties.ENCRYPTION_PADDING_NONE).build());
+   kg.generateKey();
+  }
+  Cipher cipher=Cipher.getInstance("AES/GCM/NoPadding");cipher.init(Cipher.ENCRYPT_MODE,ks.getKey(alias,null));
+  return Base64.encodeToString(cipher.getIV(),Base64.NO_WRAP)+":"+Base64.encodeToString(cipher.doFinal(plain.getBytes(StandardCharsets.UTF_8)),Base64.NO_WRAP);
+ }
+ String decrypt(String encoded)throws Exception{
+  String[] parts=encoded.split(":",2);
+  KeyStore ks=KeyStore.getInstance("AndroidKeyStore");ks.load(null);
+  Cipher cipher=Cipher.getInstance("AES/GCM/NoPadding");
+  cipher.init(Cipher.DECRYPT_MODE,ks.getKey("osiris_provider_key_v1",null),new GCMParameterSpec(128,Base64.decode(parts[0],Base64.DEFAULT)));
+  return new String(cipher.doFinal(Base64.decode(parts[1],Base64.DEFAULT)),StandardCharsets.UTF_8);
+ }
+ String request(String url)throws Exception{
+  IOException last=null;
+  for(int attempt=0;attempt<2;attempt++){
+   try{return fetch(url);}catch(IOException ex){last=ex;if(attempt==0)Thread.sleep(650);}
+  }
+  throw last;
+ }
  String q(String s)throws Exception{return java.net.URLEncoder.encode(s,"UTF-8");}
  String api(String server,String user,String pass,String action)throws Exception{
  String base=server.replaceAll("/+$","");return base+"/player_api.php?username="+q(user)+"&password="+q(pass)+(action.isEmpty()?"":"&action="+q(action));
@@ -27,21 +53,60 @@ public class MainActivity extends Activity {
  new Thread(()->{try{
  JSONArray a=new JSONArray(raw);
  switch(method){
- case "profileSave": profile=a.getJSONObject(0);getPreferences(MODE_PRIVATE).edit().putString("provider_profile",profile.toString()).apply();success(id,new JSONObject().put("saved",true).put("kind",profile.optString("kind")));break;
- case "profileLoad": if(profile==null){String saved=getPreferences(MODE_PRIVATE).getString("provider_profile",null);if(saved!=null)profile=new JSONObject(saved);}success(id,profile);break;
- case "profileClear":profile=null;getPreferences(MODE_PRIVATE).edit().remove("provider_profile").apply();success(id,true);break;
+ case "profileSave":{
+  JSONObject next=a.getJSONObject(0);
+  String encrypted=encrypt(next.toString());
+  boolean saved=getPreferences(MODE_PRIVATE).edit().putString("provider_profile_encrypted",encrypted).remove("provider_profile").commit();
+  if(!saved)throw new Exception("Unable to save provider on device");
+  profile=next;success(id,new JSONObject().put("saved",true).put("kind",profile.optString("kind")));break;}
+ case "profileLoad":{
+  if(profile==null){
+   String encrypted=getPreferences(MODE_PRIVATE).getString("provider_profile_encrypted",null);
+   if(encrypted!=null)profile=new JSONObject(decrypt(encrypted));
+   else{
+    String legacy=getPreferences(MODE_PRIVATE).getString("provider_profile",null);
+    if(legacy!=null){
+     JSONObject old=new JSONObject(legacy);
+     if(!getPreferences(MODE_PRIVATE).edit().putString("provider_profile_encrypted",encrypt(old.toString())).remove("provider_profile").commit())
+      throw new Exception("Unable to migrate saved provider");
+     profile=old;
+    }
+   }
+  }
+  success(id,profile);break;}
+ case "profileClear":profile=null;session=null;getPreferences(MODE_PRIVATE).edit().remove("provider_profile_encrypted").remove("provider_profile").commit();success(id,true);break;
  case "loadUrl":success(id,fetch(a.getString(0)));break;
  case "xtreamLogin":{
- JSONObject d=a.getJSONObject(0);String server=d.getString("server").replaceAll("/+$",""),user=d.getString("username"),pass=d.getString("password");
- JSONObject account=new JSONObject(fetch(api(server,user,pass,"")));
- if(!"1".equals(account.getJSONObject("user_info").optString("auth")))throw new Exception("Provider rejected login");
- JSONArray groups=new JSONArray(fetch(api(server,user,pass,"get_live_categories")));
- JSONArray streams=new JSONArray(fetch(api(server,user,pass,"get_live_streams")));
- Map<String,String> names=new HashMap<>();for(int i=0;i<groups.length();i++){JSONObject g=groups.getJSONObject(i);names.put(g.optString("category_id"),g.optString("category_name","Uncategorized"));}
- JSONArray channels=new JSONArray();for(int i=0;i<streams.length();i++){JSONObject c=streams.getJSONObject(i);String streamId=c.optString("stream_id"),ext=c.optString("container_extension","ts").replaceAll("[^a-zA-Z0-9]","");
- JSONObject ch=new JSONObject();ch.put("name",c.optString("name","Channel"));ch.put("streamId",streamId);ch.put("id",c.optString("epg_channel_id"));ch.put("logo",c.optString("stream_icon"));ch.put("group",names.getOrDefault(c.optString("category_id"),"Uncategorized"));ch.put("url",server+"/live/"+q(user)+"/"+q(pass)+"/"+q(streamId)+"."+(ext.isEmpty()?"ts":ext));channels.put(ch);}
+ JSONObject d=a.getJSONObject(0);
+ String server=d.getString("server").trim().replaceAll("/+$",""),user=d.getString("username"),pass=d.getString("password");
+ if(!server.startsWith("http://")&&!server.startsWith("https://"))throw new Exception("Server URL must start with http:// or https://");
+ JSONObject account;
+ try{account=new JSONObject(request(api(server,user,pass,"")));}
+ catch(org.json.JSONException ex){throw new Exception("Provider returned an unexpected authentication response");}
+ JSONObject info=account.optJSONObject("user_info");
+ if(info==null)throw new Exception("Provider response has no account information");
+ String auth=String.valueOf(info.opt("auth"));
+ if(!("1".equals(auth)||"true".equalsIgnoreCase(auth)))throw new Exception("Provider rejected credentials (auth="+auth+")");
+ // Authentication is complete even if categories or channel download fails.
  session=new JSONObject().put("server",server).put("username",user).put("password",pass);
- success(id,new JSONObject().put("channels",channels).put("count",channels.length()).put("accountStatus",account.getJSONObject("user_info").optString("status","Active")));break;}
+ JSONArray groups=new JSONArray();
+ String categoryWarning="";
+ try{groups=new JSONArray(request(api(server,user,pass,"get_live_categories")));}
+ catch(Exception ex){categoryWarning="Categories unavailable: "+ex.getMessage();}
+ JSONArray streams;
+ try{streams=new JSONArray(request(api(server,user,pass,"get_live_streams")));}
+ catch(Exception ex){throw new Exception("Login accepted, but live channels could not be downloaded: "+ex.getMessage());}
+ Map<String,String> names=new HashMap<>();
+ for(int i=0;i<groups.length();i++){JSONObject g=groups.getJSONObject(i);names.put(g.optString("category_id"),g.optString("category_name","Uncategorized"));}
+ JSONArray channels=new JSONArray();
+ for(int i=0;i<streams.length();i++){
+  JSONObject c=streams.getJSONObject(i);
+  String streamId=c.optString("stream_id"),ext=c.optString("container_extension","ts").replaceAll("[^a-zA-Z0-9]","");
+  JSONObject ch=new JSONObject();ch.put("name",c.optString("name","Channel"));ch.put("streamId",streamId);ch.put("id",c.optString("epg_channel_id"));
+  ch.put("logo",c.optString("stream_icon"));ch.put("group",names.getOrDefault(c.optString("category_id"),"Uncategorized"));
+  ch.put("url",server+"/live/"+q(user)+"/"+q(pass)+"/"+q(streamId)+"."+(ext.isEmpty()?"ts":ext));channels.put(ch);
+ }
+ success(id,new JSONObject().put("channels",channels).put("count",channels.length()).put("warning",categoryWarning).put("accountStatus",info.optString("status","Active")));break;}
  case "xtreamEpg":if(session==null)throw new Exception("Connect Xtream first");
  success(id,fetch(session.getString("server")+"/xmltv.php?username="+q(session.getString("username"))+"&password="+q(session.getString("password"))));break;
  case "openFile":fileId=id;runOnUiThread(()->{Intent intent=new Intent(Intent.ACTION_OPEN_DOCUMENT);intent.setType("*/*");intent.addCategory(Intent.CATEGORY_OPENABLE);startActivityForResult(intent,42);});break;

@@ -210,7 +210,7 @@ $('xtreamConnect').onclick=async()=>{
     let saved=true;try{await window.cadence.profileSave({kind:'xtream',server:$('xtreamServer').value,username:$('xtreamUsername').value,password:$('xtreamPassword').value})}catch(err){saved=false;console.warn('Secure save failed',err)}
     render();settings(false);
     $('savedProviderLabel').textContent=saved?'Xtream account saved':'Not saved';void refreshEpg(false);
-    status(`Xtream connected · ${channels.length} channels${saved?' · saved for next launch':' · secure save unavailable'}`);
+    status(`Xtream connected · ${channels.length} channels${result.warning?' · '+result.warning:''}${saved?' · saved for next launch':' · save unavailable'}`);
   }catch(e){settingInvalid('xtream');status('Xtream error: '+e.message)}finally{btn.disabled=false}
 };
 $('loadM3u').onclick=async()=>{try{clearSettingInvalid('m3u');status('Loading playlist…');const url=$('m3uUrl').value.trim();const text=await window.cadence.loadUrl(url);savePlaylist(text);try{await window.cadence.profileSave({kind:'m3u-url',url});$('savedProviderLabel').textContent='M3U URL saved'}catch(e){status('Playlist loaded but not saved: '+e.message)}}catch(e){settingInvalid('m3u');status('Error: '+e.message)}};$('openM3u').onclick=async()=>{try{const t=await window.cadence.openFile([{name:'M3U Playlists',extensions:['m3u','m3u8','txt']}]);if(t){savePlaylist(t);try{await window.cadence.profileSave({kind:'m3u-file',playlist:t});$('savedProviderLabel').textContent='Local M3U saved'}catch(e){status('Playlist loaded but not saved: '+e.message)}}}catch(e){status('Error: '+e.message)}};$('loadEpg').onclick=async()=>{try{clearSettingInvalid('epg');status('Loading guide…');localStorage.setItem('cadenceEpgUrlV1',$('epgUrl').value.trim());saveEpg(await window.cadence.loadUrl($('epgUrl').value.trim()))}catch(e){settingInvalid('epg');status('Error: '+e.message)}};$('openEpg').onclick=async()=>{try{const t=await window.cadence.openFile([{name:'XMLTV',extensions:['xml','txt']}]);if(t)saveEpg(t)}catch(e){status('Error: '+e.message)}};
@@ -266,7 +266,7 @@ async function restoreProvider(){
   if(saved.kind==='xtream'){
     $('xtreamServer').value=saved.server;$('xtreamUsername').value=saved.username;$('xtreamPassword').value=saved.password||'';
     const result=await window.cadence.xtreamLogin({server:saved.server,username:saved.username,password:saved.password});
-    window.epgSource='xtream';channels=result.channels;reconcileFavorites();status(`Restored ${channels.length} Xtream channels`);
+    window.epgSource='xtream';channels=result.channels;reconcileFavorites();status(`Restored ${channels.length} Xtream channels${result.warning?' · '+result.warning:''}`);
   }else if(saved.kind==='m3u-url'){
     $('m3uUrl').value=saved.url;savePlaylist(await window.cadence.loadUrl(saved.url));status(`Restored ${channels.length} M3U channels`);
   }else if(saved.kind==='m3u-file'){savePlaylist(saved.playlist);status(`Restored ${channels.length} M3U channels`)}
