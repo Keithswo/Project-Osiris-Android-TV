@@ -1,0 +1,7 @@
+plugins { id 'com.android.application' }
+android {
+ namespace 'tv.projectosiris.android'
+ compileSdk 35
+ defaultConfig { applicationId 'tv.projectosiris.android'; minSdk 23; targetSdk 28; versionCode 1; versionName '2.3.9-tv-preview' }
+ compileOptions { sourceCompatibility JavaVersion.VERSION_17; targetCompatibility JavaVersion.VERSION_17 }
+}
