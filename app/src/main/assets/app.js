@@ -202,7 +202,7 @@ $('xtreamConnect').onclick=async()=>{
     channels=result.channels;reconcileFavorites();category='All Channels';current=null;window.epgSource='xtream';
     localStorage.removeItem('cadenceM3U');
     let saved=true;try{await window.cadence.profileSave({kind:'xtream',server:$('xtreamServer').value,username:$('xtreamUsername').value,password:$('xtreamPassword').value})}catch(err){saved=false;console.warn('Secure save failed',err)}
-    $('xtreamPassword').value='';render();settings(false);
+    render();settings(false);
     $('savedProviderLabel').textContent=saved?'Xtream account saved':'Not saved';void refreshEpg(false);
     status(`Xtream connected · ${channels.length} channels${saved?' · saved for next launch':' · secure save unavailable'}`);
   }catch(e){settingInvalid('xtream');status('Xtream error: '+e.message)}finally{btn.disabled=false}
@@ -258,7 +258,7 @@ async function restoreProvider(){
   if(!saved){const legacy=localStorage.getItem('cadenceM3U');if(legacy){savePlaylist(legacy);try{await window.cadence.profileSave({kind:'m3u-file',playlist:legacy})}catch(e){console.warn(e)}localStorage.removeItem('cadenceM3U')}return}
   $('savedProviderLabel').textContent=saved.kind==='xtream'?'Xtream account saved':'M3U playlist saved';
   if(saved.kind==='xtream'){
-    $('xtreamServer').value=saved.server;$('xtreamUsername').value=saved.username;
+    $('xtreamServer').value=saved.server;$('xtreamUsername').value=saved.username;$('xtreamPassword').value=saved.password||'';
     const result=await window.cadence.xtreamLogin({server:saved.server,username:saved.username,password:saved.password});
     window.epgSource='xtream';channels=result.channels;reconcileFavorites();status(`Restored ${channels.length} Xtream channels`);
   }else if(saved.kind==='m3u-url'){
@@ -392,29 +392,3 @@ $('guideNow').onclick=()=>{$('epgScroll').scrollTo({left:0,behavior:'smooth'})};
 // Bulk buttons are registered once and remain available after settings re-renders.
 $('checkAllCategories')?.addEventListener('click',()=>setAllCategories(true));
 $('uncheckAllCategories')?.addEventListener('click',()=>setAllCategories(false));
-
-// Fire TV D-pad: let Up/Down leave the two-hour timeline slider.
-(function(){
- const timeline=document.getElementById('guideTimeline');
- const focusFirst=selectors=>{
-  for(const selector of selectors){
-   const el=document.querySelector(selector);
-   if(el&&!el.disabled&&el.getClientRects().length){el.focus({preventScroll:true});return true;}
-  }
-  return false;
- };
- const epgScroll=document.getElementById('epgScroll');
- epgScroll.setAttribute('tabindex','-1');
- timeline.addEventListener('keydown',e=>{
-  if(e.key==='ArrowUp'){
-   e.preventDefault();e.stopImmediatePropagation();
-   focusFirst(['#guideLater','#guideEarlier','#refresh','#search']);
-  }else if(e.key==='ArrowDown'){
-   e.preventDefault();e.stopImmediatePropagation();
-   focusFirst(['#epg [tabindex="0"]','#epg button','#epg [role="button"]','#epgScroll']);
-  }else if(e.key==='Escape'||e.key==='BrowserBack'){
-   e.preventDefault();e.stopImmediatePropagation();
-   focusFirst(['#guideEarlier','#refresh','#search']);
-  }
- },true);
-})();
