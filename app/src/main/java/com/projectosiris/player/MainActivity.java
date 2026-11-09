@@ -66,19 +66,28 @@ public class MainActivity extends Activity {
   TextView search=text("⌕",28);search.setGravity(Gravity.CENTER);search.setContentDescription("Browse channels");search.setOnClickListener(v->chooseCategory(-1));brand.addView(search,new LinearLayout.LayoutParams(dp(40),dp(getResources().getConfiguration().orientation==Configuration.ORIENTATION_LANDSCAPE?34:52)));
   TextView menu=text("⋮",25);menu.setGravity(Gravity.CENTER);menu.setContentDescription("Settings");menu.setOnClickListener(v->showSettings());brand.addView(menu,new LinearLayout.LayoutParams(dp(34),dp(getResources().getConfiguration().orientation==Configuration.ORIENTATION_LANDSCAPE?34:52)));add(header,brand);
   View separator=new View(this);separator.setBackgroundColor(Color.rgb(100,100,100));header.addView(separator,new LinearLayout.LayoutParams(-1,dp(1)));
-  navBar=new LinearLayout(this);navBar.setOrientation(LinearLayout.HORIZONTAL);navBar.setPadding(dp(3),dp(4),dp(3),dp(4));add(header,navBar);
+  navBar=new LinearLayout(this);navBar.setOrientation(LinearLayout.VERTICAL);navBar.setPadding(dp(3),dp(4),dp(3),dp(4));
   String[] labels={"Live TV","Guide","Multiview","Categories","Settings"};String[] symbols={"▣","▦","⊞","☷","⚙"};
   for(int i=0;i<labels.length;i++){
-   final String name=labels[i];LinearLayout item=column();item.setGravity(Gravity.CENTER);item.setFocusable(true);item.setClickable(true);
+   final String name=labels[i];LinearLayout item=column();item.setGravity(Gravity.CENTER);item.setFocusable(true);item.setClickable(true);item.setId(View.generateViewId());
    TextView icon=text(symbols[i],21);icon.setGravity(Gravity.CENTER);icon.setPadding(0,0,0,0);item.addView(icon,new LinearLayout.LayoutParams(-1,dp(25)));
    TextView title=text(name,11);title.setSingleLine(true);title.setGravity(Gravity.CENTER);title.setPadding(0,0,0,0);item.addView(title,new LinearLayout.LayoutParams(-1,dp(19)));
    item.setOnClickListener(v->{targetTile=-1;if(name.equals("Settings")){showSettings();return;}previousView=currentView;currentView=name.equals("Live TV")?"live":name.equals("Multiview")?"multi":name.equals("Categories")?"categories":"guide";render();});
-   LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(0,dp(getResources().getConfiguration().orientation==Configuration.ORIENTATION_LANDSCAPE?43:55),1);lp.setMargins(dp(1),0,dp(1),0);navBar.addView(item,lp);navButtons.add(item);
+   LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(-1,dp(58));lp.setMargins(dp(1),0,dp(1),0);navBar.addView(item,lp);navButtons.add(item);
   }
   info=text("Add an M3U or Xtream account in Settings to begin.",11);info.setTextColor(muted);info.setPadding(dp(12),dp(3),dp(12),dp(6));add(header,info);
-  ScrollView scroll=new ScrollView(this);scroll.setFillViewport(true);scroll.setBackgroundResource(R.drawable.osiris_background);body=column();body.setPadding(dp(9),dp(10),dp(9),dp(22));scroll.addView(body);root.addView(scroll,new LinearLayout.LayoutParams(-1,0,1));render();
+  ScrollView scroll=new ScrollView(this);scroll.setFillViewport(true);scroll.setBackgroundResource(R.drawable.osiris_background);body=column();body.setPadding(dp(9),dp(10),dp(9),dp(22));scroll.addView(body);LinearLayout mainArea=new LinearLayout(this);mainArea.setOrientation(LinearLayout.HORIZONTAL);
+  mainArea.addView(navBar,new LinearLayout.LayoutParams(dp(140),-1));
+  mainArea.addView(scroll,new LinearLayout.LayoutParams(0,-1,1));
+  root.addView(mainArea,new LinearLayout.LayoutParams(-1,0,1));
+  for(int i=0;i<navButtons.size();i++){final int pos=i;LinearLayout item=navButtons.get(i);
+   item.setOnFocusChangeListener((v,hasFocus)->updateNav());
+   item.setNextFocusUpId(navButtons.get((i+navButtons.size()-1)%navButtons.size()).getId());
+   item.setNextFocusDownId(navButtons.get((i+1)%navButtons.size()).getId());
+  }
+  navButtons.get(0).requestFocus();render();
  }
- void updateNav(){String active=currentView.equals("multi")?"Multiview":currentView.equals("guide")?"Guide":currentView.equals("categories")?"Categories":"Live TV";String[] labels={"Live TV","Guide","Multiview","Categories","Settings"};for(int i=0;i<navButtons.size();i++){LinearLayout item=navButtons.get(i);boolean selected=labels[i].equals(active);item.setBackground(chrome(selected?Color.rgb(75,75,75):Color.rgb(15,15,15),selected?Color.rgb(22,22,22):Color.rgb(5,5,5),selected?Color.WHITE:Color.rgb(36,36,36),9));}}
+ void updateNav(){String active=currentView.equals("multi")?"Multiview":currentView.equals("guide")?"Guide":currentView.equals("categories")?"Categories":"Live TV";String[] labels={"Live TV","Guide","Multiview","Categories","Settings"};for(int i=0;i<navButtons.size();i++){LinearLayout item=navButtons.get(i);boolean selected=labels[i].equals(active);boolean focused=item.hasFocus();item.setBackground(chrome(focused?Color.rgb(110,110,110):selected?Color.rgb(75,75,75):Color.rgb(15,15,15),selected?Color.rgb(22,22,22):Color.rgb(5,5,5),focused?Color.WHITE:selected?Color.WHITE:Color.rgb(36,36,36),9));}}
  @Override public void onConfigurationChanged(Configuration config){super.onConfigurationChanged(config);if(root!=null){releasePlayers();buildShell();}}
  void message(String s){info.setText(s);}
  void releasePlayers(){for(ExoPlayer p:players){p.release();}players.clear();playerTiles.clear();}
