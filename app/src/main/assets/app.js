@@ -196,7 +196,7 @@ function settingInvalid(kind){
    const anchor=kind==='xtream'?$('xtreamConnect'):kind==='m3u'?$('loadM3u'):kind==='epg'?$('loadEpg'):input;
    anchor.insertAdjacentElement('afterend',message);
  }
- message.textContent='Invalid';input.classList.add('setting-input-invalid');
+ message.textContent='Connection failed — see the status message for details';input.classList.add('setting-input-invalid');
 }
 function clearSettingInvalid(kind){const message=document.getElementById('invalid-'+kind);if(message)message.remove();$(settingErrors[kind])?.classList.remove('setting-input-invalid')}
 [['xtreamServer','xtream'],['xtreamUsername','xtream'],['xtreamPassword','xtream'],['m3uUrl','m3u'],['epgUrl','epg'],['epgHours','hours']].forEach(([id,kind])=>$(id).addEventListener('input',()=>clearSettingInvalid(kind)));
@@ -211,7 +211,7 @@ $('xtreamConnect').onclick=async()=>{
     render();settings(false);
     $('savedProviderLabel').textContent=saved?'Xtream account saved':'Not saved';void refreshEpg(false);
     status(`Xtream connected · ${channels.length} channels${result.warning?' · '+result.warning:''}${saved?' · saved for next launch':' · save unavailable'}`);
-  }catch(e){settingInvalid('xtream');status('Xtream error: '+e.message)}finally{btn.disabled=false}
+  }catch(e){settingInvalid('xtream');const message=String(e?.message||e);document.getElementById('invalid-xtream').textContent=message;status('Xtream connection failed: '+message)}finally{btn.disabled=false}
 };
 $('loadM3u').onclick=async()=>{try{clearSettingInvalid('m3u');status('Loading playlist…');const url=$('m3uUrl').value.trim();const text=await window.cadence.loadUrl(url);savePlaylist(text);try{await window.cadence.profileSave({kind:'m3u-url',url});$('savedProviderLabel').textContent='M3U URL saved'}catch(e){status('Playlist loaded but not saved: '+e.message)}}catch(e){settingInvalid('m3u');status('Error: '+e.message)}};$('openM3u').onclick=async()=>{try{const t=await window.cadence.openFile([{name:'M3U Playlists',extensions:['m3u','m3u8','txt']}]);if(t){savePlaylist(t);try{await window.cadence.profileSave({kind:'m3u-file',playlist:t});$('savedProviderLabel').textContent='Local M3U saved'}catch(e){status('Playlist loaded but not saved: '+e.message)}}}catch(e){status('Error: '+e.message)}};$('loadEpg').onclick=async()=>{try{clearSettingInvalid('epg');status('Loading guide…');localStorage.setItem('cadenceEpgUrlV1',$('epgUrl').value.trim());saveEpg(await window.cadence.loadUrl($('epgUrl').value.trim()))}catch(e){settingInvalid('epg');status('Error: '+e.message)}};$('openEpg').onclick=async()=>{try{const t=await window.cadence.openFile([{name:'XMLTV',extensions:['xml','txt']}]);if(t)saveEpg(t)}catch(e){status('Error: '+e.message)}};
 const epgDefaults={auto:false,hours:1,onLaunch:true};

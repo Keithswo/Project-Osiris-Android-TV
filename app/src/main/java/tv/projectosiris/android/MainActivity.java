@@ -15,8 +15,8 @@ public class MainActivity extends Activity {
  void fail(int id,String s){respond(id,false,s);}
  String fetch(String raw)throws Exception{
  URL url=new URL(raw);String scheme=url.getProtocol();if(!scheme.equals("http")&&!scheme.equals("https"))throw new Exception("Only HTTP(S) URLs are supported");
- HttpURLConnection c=(HttpURLConnection)url.openConnection();c.setConnectTimeout(15000);c.setReadTimeout(65000);c.setRequestProperty("User-Agent","ProjectOsirisAndroidTV/2.3.9");
- try(InputStream in=c.getInputStream()){ByteArrayOutputStream out=new ByteArrayOutputStream();byte[] b=new byte[8192];int n;while((n=in.read(b))!=-1){out.write(b,0,n);if(out.size()>25000000)throw new IOException("Response too large");}return out.toString("UTF-8");}finally{c.disconnect();}
+ HttpURLConnection c=(HttpURLConnection)url.openConnection();c.setConnectTimeout(15000);c.setReadTimeout(65000);c.setInstanceFollowRedirects(true);c.setRequestProperty("Accept","application/json, */*");c.setRequestProperty("User-Agent","Mozilla/5.0 (Linux; Android 11; Android TV) AppleWebKit/537.36 Chrome/120.0 Safari/537.36");
+ int code=c.getResponseCode();if(code==401||code==403)throw new IOException("Provider returned HTTP "+code+" (access denied)");if(code>=400)throw new IOException("Provider returned HTTP "+code);try(InputStream in=c.getInputStream()){ByteArrayOutputStream out=new ByteArrayOutputStream();byte[] b=new byte[8192];int n;while((n=in.read(b))!=-1){out.write(b,0,n);if(out.size()>25000000)throw new IOException("Response too large");}return out.toString("UTF-8");}finally{c.disconnect();}
  }
  String encrypt(String plain)throws Exception{
   KeyStore ks=KeyStore.getInstance("AndroidKeyStore");ks.load(null);
@@ -46,7 +46,7 @@ public class MainActivity extends Activity {
  }
  String q(String s)throws Exception{return java.net.URLEncoder.encode(s,"UTF-8");}
  String api(String server,String user,String pass,String action)throws Exception{
- String base=server.replaceAll("/+$","");return base+"/player_api.php?username="+q(user)+"&password="+q(pass)+(action.isEmpty()?"":"&action="+q(action));
+ String base=server.replaceAll("/+$","").replaceAll("(?i)/player_api\.php$","");return base+"/player_api.php?username="+q(user)+"&password="+q(pass)+(action.isEmpty()?"":"&action="+q(action));
  }
  class Bridge{
  @JavascriptInterface public void call(int id,String method,String raw){
@@ -78,15 +78,15 @@ public class MainActivity extends Activity {
  case "loadUrl":success(id,fetch(a.getString(0)));break;
  case "xtreamLogin":{
  JSONObject d=a.getJSONObject(0);
- String server=d.getString("server").trim().replaceAll("/+$",""),user=d.getString("username"),pass=d.getString("password");
+ String server=d.getString("server").trim().replaceAll("/+$","").replaceAll("(?i)/player_api\.php$",""),user=d.getString("username"),pass=d.getString("password");
  if(!server.startsWith("http://")&&!server.startsWith("https://"))throw new Exception("Server URL must start with http:// or https://");
  JSONObject account;
  try{account=new JSONObject(request(api(server,user,pass,"")));}
  catch(org.json.JSONException ex){throw new Exception("Provider returned an unexpected authentication response");}
  JSONObject info=account.optJSONObject("user_info");
- if(info==null)throw new Exception("Provider response has no account information");
+ if(info==null)throw new Exception("Provider did not return Xtream account information; check the server URL and port");
  String auth=String.valueOf(info.opt("auth"));
- if(!("1".equals(auth)||"true".equalsIgnoreCase(auth)))throw new Exception("Provider rejected credentials (auth="+auth+")");
+ if(!("1".equals(auth)||"true".equalsIgnoreCase(auth)))throw new Exception("Provider rejected this login (auth="+auth+"). Check server URL and port; credentials were not erased");
  // Authentication is complete even if categories or channel download fails.
  session=new JSONObject().put("server",server).put("username",user).put("password",pass);
  JSONArray groups=new JSONArray();
