@@ -392,3 +392,29 @@ $('guideNow').onclick=()=>{$('epgScroll').scrollTo({left:0,behavior:'smooth'})};
 // Bulk buttons are registered once and remain available after settings re-renders.
 $('checkAllCategories')?.addEventListener('click',()=>setAllCategories(true));
 $('uncheckAllCategories')?.addEventListener('click',()=>setAllCategories(false));
+
+// Fire TV D-pad: let Up/Down leave the two-hour timeline slider.
+(function(){
+ const timeline=document.getElementById('guideTimeline');
+ const focusFirst=selectors=>{
+  for(const selector of selectors){
+   const el=document.querySelector(selector);
+   if(el&&!el.disabled&&el.getClientRects().length){el.focus({preventScroll:true});return true;}
+  }
+  return false;
+ };
+ const epgScroll=document.getElementById('epgScroll');
+ epgScroll.setAttribute('tabindex','-1');
+ timeline.addEventListener('keydown',e=>{
+  if(e.key==='ArrowUp'){
+   e.preventDefault();e.stopImmediatePropagation();
+   focusFirst(['#guideLater','#guideEarlier','#refresh','#search']);
+  }else if(e.key==='ArrowDown'){
+   e.preventDefault();e.stopImmediatePropagation();
+   focusFirst(['#epg [tabindex="0"]','#epg button','#epg [role="button"]','#epgScroll']);
+  }else if(e.key==='Escape'||e.key==='BrowserBack'){
+   e.preventDefault();e.stopImmediatePropagation();
+   focusFirst(['#guideEarlier','#refresh','#search']);
+  }
+ },true);
+})();
