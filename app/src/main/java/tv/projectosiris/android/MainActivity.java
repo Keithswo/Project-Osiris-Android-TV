@@ -53,5 +53,7 @@ public class MainActivity extends Activity {
  }
  }
  @Override protected void onActivityResult(int req,int result,Intent data){super.onActivityResult(req,result,data);if(req==42&&fileId>=0){int id=fileId;fileId=-1;if(result!=RESULT_OK||data==null){success(id,null);return;}try(InputStream in=getContentResolver().openInputStream(data.getData())){ByteArrayOutputStream out=new ByteArrayOutputStream();byte[] b=new byte[8192];int n;while((n=in.read(b))!=-1){out.write(b,0,n);if(out.size()>25000000)throw new IOException("File too large");}success(id,out.toString("UTF-8"));}catch(Exception e){fail(id,e.getMessage());}}}
- @Override public void onBackPressed(){web.evaluateJavascript("(function(){var p=document.getElementById('settingsPanel');if(p&&!p.classList.contains('hidden')){var b=document.getElementById('closeSettings');if(b)b.click();return true}return false})()",v->{if(!"true".equals(v))super.onBackPressed();});}
+ @Override public void onBackPressed(){
+ web.evaluateJavascript("(function(){var p=document.getElementById('settingsPanel');if(!p||p.classList.contains('hidden'))return false;var a=document.activeElement;if(a&&a.matches('input,textarea')){a.blur();return true;}var b=document.getElementById('closeSettings');if(b)b.click();return true;})()",v->{if(!"true".equals(v))super.onBackPressed();});
+}
 }

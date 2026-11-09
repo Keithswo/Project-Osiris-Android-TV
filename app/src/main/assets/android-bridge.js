@@ -11,7 +11,5 @@ window.cadence={
  dvrStatus:()=>Promise.resolve({available:false,active:false}),
  mvStart:(slot,url)=>Promise.resolve({url}),mvStop:()=>Promise.resolve(true)
 };
-document.addEventListener('keydown',e=>{
- if(e.key==='Escape'||e.key==='Backspace'){const close=document.getElementById('closeSettings');if(close&&!document.getElementById('settingsPanel')?.classList.contains('hidden')){close.click();e.preventDefault()}}
-});
+// Keep Backspace available to the Android keyboard for text editing.
 })();

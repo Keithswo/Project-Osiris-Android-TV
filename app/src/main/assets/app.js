@@ -16,8 +16,9 @@ document.addEventListener('keydown',e=>{
  const panel=document.getElementById('settingsPanel');
  if(!panel||panel.classList.contains('hidden'))return;
  if(e.key==='Escape'||e.key==='BrowserBack'){
-  if(document.activeElement?.matches('input,textarea')&&document.activeElement===document.activeElement){document.activeElement.blur();}
-  settings(false);e.preventDefault();e.stopImmediatePropagation();return;
+  if(document.activeElement?.matches('input,textarea')) document.activeElement.blur();
+  else settings(false);
+  e.preventDefault();e.stopImmediatePropagation();return;
  }
  if(!['ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].includes(e.key))return;
  const targets=[...panel.querySelectorAll('input:not([type="hidden"]),button,select,textarea')].filter(el=>!el.disabled&&el.getClientRects().length);
