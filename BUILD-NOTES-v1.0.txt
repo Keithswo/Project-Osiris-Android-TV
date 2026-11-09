@@ -1,0 +1,6 @@
+Project Osiris Android TV v1.0 baseline
+Based on the uploaded working Android app source.
+This is a source package, not a compiled APK.
+Upload the extracted contents to the root of your GitHub repository, then run the Build Project Osiris Android APK workflow.
+This baseline retains the original application logic and TV launcher support. It has not yet received the planned TV Guide or authentication refactor.
+Android build and device testing have not been performed.
