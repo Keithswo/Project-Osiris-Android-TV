@@ -114,6 +114,11 @@ function isFavorite(c){return favorites.has(channelKey(c))||favorites.has(legacy
 function reconcileFavorites(){let changed=false;for(const c of channels){const old=legacyChannelKey(c),key=channelKey(c);if(old!==key&&favorites.has(old)){favorites.delete(old);favorites.add(key);changed=true}}if(changed)persistFavorites()}
 function filtered(){let q=$('search').value.toLowerCase();return visibleChannels().filter(c=>(category==='All Channels'||(category==='Favorites'?isFavorite(c):c.group===category))&&(!q||c.name.toLowerCase().includes(q)||getPrograms(c).some(p=>p.title.toLowerCase().includes(q))))}
 const GUIDE_SLOTS=24, GUIDE_SLOT_WIDTH=190, GUIDE_CHANNEL_WIDTH=190;
+let guideLastChannelKey=null;
+function guideChannelElements(){return [...document.querySelectorAll('#epg .epg-row .channel[data-channel]')]}
+function focusGuideChannel(preferred){const list=guideChannelElements();if(!list.length)return false;const target=list.find(el=>channelKey(channels[+el.dataset.channel])===preferred)||list[0];target.focus({preventScroll:true});target.scrollIntoView({block:'nearest',inline:'nearest'});return true;}
+function focusGuideNav(){const nav=document.querySelector('.nav[data-view="guide"]');nav?.focus({preventScroll:true});}
+
 function renderGuide(){
  const sc=$('epgScroll'),savedX=sc.scrollLeft,savedY=sc.scrollTop;
  const cs=filtered();$('guideTitle').textContent=category==='All Channels'?'TV Guide':category;$('guideInfo').textContent=`${cs.length} channels · scroll right for upcoming programs`;
@@ -122,11 +127,11 @@ function renderGuide(){
  let html=`<div class="epg-head"><div>Channels</div>${times}</div>`;
  for(const c of cs.slice(0,1000)){
   const index=channels.indexOf(c),progs=getPrograms(c);
-  html+=`<div class="epg-row"><div class="channel ${current?.url===c.url?'selected':''}" data-channel="${index}">${c.logo?`<img src="${escapeHtml(c.logo)}" onerror="this.style.display='none'">`:''}<span>${escapeHtml(c.name)}</span></div>`;
+  html+=`<div class="epg-row"><div tabindex="0" role="button" class="channel ${current?.url===c.url?'selected':''}" data-channel="${index}">${c.logo?`<img src="${escapeHtml(c.logo)}" onerror="this.style.display='none'">`:''}<span>${escapeHtml(c.name)}</span></div>`;
   for(let i=0;i<GUIDE_SLOTS;i++){const t=base+i*half+half/2,p=progs.find(x=>x.start<=t&&x.stop>t);html+=`<button class="program ${p&&p.start<=now&&p.stop>now?'current':''}" data-channel="${index}" title="${escapeHtml(p?.desc||'')}">${escapeHtml(p?.title||'No guide data')}</button>`}html+='</div>';
  }
  $('epg').innerHTML=html;sc.scrollLeft=savedX;sc.scrollTop=savedY;guideSync();
- $('epg').querySelectorAll('[data-channel]').forEach(e=>e.onclick=()=>{const index=+e.dataset.channel;if(mvPickerOpen){mvPick(mvPickerTarget,index);mvClosePicker();mvResumePlayback(mvPickerTarget);}else playChannel(channels[index]);});
+ $('epg').querySelectorAll('[data-channel]').forEach(e=>e.onclick=()=>{const index=+e.dataset.channel;if(mvPickerOpen){mvPick(mvPickerTarget,index);mvClosePicker();mvResumePlayback(mvPickerTarget);}else {guideLastChannelKey=channelKey(channels[index]);playChannel(channels[index]);}});
 }
 function guideSync(){const s=$('epgScroll');$('guideTimeline').value=String(Math.round(s.scrollLeft/Math.max(1,s.scrollWidth-s.clientWidth)*20))}
 function renderDetails(){let p=current&&nowProgram(current);$('programTitle').textContent=p?.title||current?.name||'Live TV';$('programMeta').textContent=current?`${current.name}${p?' · '+new Date(p.start).toLocaleTimeString([],{hour:'numeric',minute:'2-digit'})+' – '+new Date(p.stop).toLocaleTimeString([],{hour:'numeric',minute:'2-digit'}):''}`:'Choose a channel';$('description').textContent=p?.desc|| (current?'Live channel playback':'Browse channels and select a program to watch.');$('progress').style.width=p?Math.min(100,Math.max(0,(Date.now()-p.start)/(p.stop-p.start)*100))+'%':'0%';$('favorite').textContent=current&&isFavorite(current)?'★ Favorited':'☆ Favorite'}
@@ -168,6 +173,7 @@ function showView(view){
   else if(view==='guide'||view==='live')category='All Channels';
   else if(view==='recent'){category='All Channels';$('search').value=''}
   render();
+  if(view==='guide')requestAnimationFrame(()=>focusGuideChannel(guideLastChannelKey||localStorage.getItem('cadenceLastChannelV2')));
   if(view==='recent'){
     const ids=new Set(recent);
     document.querySelectorAll('.epg-row').forEach(r=>{const el=r.querySelector('[data-channel]');if(el&&!ids.has(channelKey(channels[+el.dataset.channel])))r.remove()});
@@ -392,3 +398,52 @@ $('guideNow').onclick=()=>{$('epgScroll').scrollTo({left:0,behavior:'smooth'})};
 // Bulk buttons are registered once and remain available after settings re-renders.
 $('checkAllCategories')?.addEventListener('click',()=>setAllCategories(true));
 $('uncheckAllCategories')?.addEventListener('click',()=>setAllCategories(false));
+
+// Remote navigation: channel list is the default Guide focus, and Up at the top exits to tabs.
+(function(){
+ const timeline=$('guideTimeline');
+ document.addEventListener('focusin',e=>{
+  const row=e.target.closest?.('#epg .channel[data-channel],#epg .program[data-channel]');
+  if(row){const c=channels[+row.dataset.channel];if(c)guideLastChannelKey=channelKey(c);}
+ });
+ document.addEventListener('keydown',e=>{
+  if(activeView!=='guide'||!$('settingsPanel').classList.contains('hidden'))return;
+  const el=document.activeElement;
+  const isNav=el?.matches?.('.nav');
+  const row=el?.closest?.('#epg .epg-row');
+  const inGuide=!!row;
+  const isTimeline=el===timeline;
+  const keys=['ArrowUp','ArrowDown','ArrowLeft','ArrowRight','Enter',' ','Escape','BrowserBack'];
+  if(!keys.includes(e.key))return;
+  if(isNav&&e.key==='ArrowDown'){
+   if(focusGuideChannel(guideLastChannelKey)){e.preventDefault();e.stopImmediatePropagation();}return;
+  }
+  if(isTimeline){
+   if(e.key==='ArrowDown'){focusGuideChannel(guideLastChannelKey);e.preventDefault();e.stopImmediatePropagation();}
+   else if(e.key==='ArrowUp'||e.key==='Escape'||e.key==='BrowserBack'){focusGuideNav();e.preventDefault();e.stopImmediatePropagation();}
+   return;
+  }
+  if(!inGuide)return;
+  const rows=[...document.querySelectorAll('#epg .epg-row')];
+  const rowIndex=rows.indexOf(row);
+  const channel=row.querySelector('.channel[data-channel]');
+  const programs=[...row.querySelectorAll('.program[data-channel]')];
+  const programIndex=programs.indexOf(el);
+  let target=null;
+  if(e.key==='ArrowUp'){
+   if(rowIndex<=0){focusGuideNav();e.preventDefault();e.stopImmediatePropagation();return;}
+   const next=rows[rowIndex-1];target=programIndex>=0?next.querySelectorAll('.program')[programIndex]:next.querySelector('.channel');
+  }else if(e.key==='ArrowDown'){
+   const next=rows[rowIndex+1];if(next)target=programIndex>=0?next.querySelectorAll('.program')[programIndex]:next.querySelector('.channel');
+  }else if(e.key==='ArrowRight'){
+   target=programIndex<0?programs[0]:programs[programIndex+1];
+  }else if(e.key==='ArrowLeft'){
+   target=programIndex<=0?channel:programs[programIndex-1];
+  }else if(e.key==='Enter'||e.key===' '){
+   el.click();e.preventDefault();e.stopImmediatePropagation();return;
+  }else if(e.key==='Escape'||e.key==='BrowserBack'){
+   focusGuideNav();e.preventDefault();e.stopImmediatePropagation();return;
+  }
+  if(target){target.focus({preventScroll:true});target.scrollIntoView({block:'nearest',inline:'nearest'});e.preventDefault();e.stopImmediatePropagation();}
+ },true);
+})();;
