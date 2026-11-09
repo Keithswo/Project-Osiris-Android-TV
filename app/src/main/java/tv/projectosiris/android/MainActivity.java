@@ -46,7 +46,7 @@ public class MainActivity extends Activity {
  }
  String q(String s)throws Exception{return java.net.URLEncoder.encode(s,"UTF-8");}
  String api(String server,String user,String pass,String action)throws Exception{
- String base=server.replaceAll("/+$","").replaceAll("(?i)/player_api\.php$","");return base+"/player_api.php?username="+q(user)+"&password="+q(pass)+(action.isEmpty()?"":"&action="+q(action));
+ String base=server.replaceAll("/+$","").replaceAll("(?i)/player_api\\.php$","");return base+"/player_api.php?username="+q(user)+"&password="+q(pass)+(action.isEmpty()?"":"&action="+q(action));
  }
  class Bridge{
  @JavascriptInterface public void call(int id,String method,String raw){
@@ -78,7 +78,7 @@ public class MainActivity extends Activity {
  case "loadUrl":success(id,fetch(a.getString(0)));break;
  case "xtreamLogin":{
  JSONObject d=a.getJSONObject(0);
- String server=d.getString("server").trim().replaceAll("/+$","").replaceAll("(?i)/player_api\.php$",""),user=d.getString("username"),pass=d.getString("password");
+ String server=d.getString("server").trim().replaceAll("/+$","").replaceAll("(?i)/player_api\\.php$",""),user=d.getString("username"),pass=d.getString("password");
  if(!server.startsWith("http://")&&!server.startsWith("https://"))throw new Exception("Server URL must start with http:// or https://");
  JSONObject account;
  try{account=new JSONObject(request(api(server,user,pass,"")));}
